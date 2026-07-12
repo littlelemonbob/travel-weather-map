@@ -2783,18 +2783,20 @@
 
             const results = await Promise.allSettled(promises);
 
-            // 按坐标匹配
-            const norm = n => Math.round(n * 100000) / 100000;
+            // 按返回顺序直接对应（Open-Meteo 返回顺序 = 请求顺序）
+            let batchIdx = 0;
             let batchErrors = [];
             results.forEach((r, i) => {
-                if (r.status === 'rejected') batchErrors.push('批' + i + ': ' + (r.reason?.message || r.reason));
-                else for (const cityData of r.value) {
-                    if (!cityData || !cityData.daily) continue;
-                    const lat = norm(cityData.latitude);
-                    const lon = norm(cityData.longitude);
-                    const city = cities.find(c => norm(c.lat) === lat && norm(c.lon) === lon);
-                    if (!city) continue;
-                    allWeatherData[city.name] = { daily: cityData.daily };
+                if (r.status === 'rejected') {
+                    batchErrors.push('批' + i + ': ' + (r.reason?.message || r.reason));
+                } else {
+                    const batchCities = batches[i];
+                    r.value.forEach((cityData, j) => {
+                        if (!cityData || !cityData.daily) return;
+                        const city = batchCities[j];
+                        if (!city) return;
+                        allWeatherData[city.name] = { daily: cityData.daily };
+                    });
                 }
             });
 
