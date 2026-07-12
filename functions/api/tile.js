@@ -14,16 +14,10 @@ export async function onRequest(context) {
         const resp = await fetch(tileUrl, {
             headers: {
                 'User-Agent': 'Mozilla/5.0 (compatible; WeatherMap/1.0)',
-                'Referer': 'https://travel-weather-map.pages.dev/',
             }
         });
         if (!resp.ok) {
-            // 高德失败时降级到 CartoDB 英文（至少地图能显示）
-            const fallback = await fetch(`https://${sd}.basemaps.cartocdn.com/light_all/${z}/${x}/${y}.png`);
-            const fallbackBlob = await fallback.blob();
-            return new Response(fallbackBlob, {
-                headers: { 'content-type': 'image/png', 'cache-control': 'public, max-age=86400' }
-            });
+            return new Response('高德 ' + resp.status, { status: 502 });
         }
         const blob = await resp.blob();
         return new Response(blob, {
@@ -32,16 +26,7 @@ export async function onRequest(context) {
                 'cache-control': 'public, max-age=86400',
             },
         });
-    } catch {
-        // 出错时降级到 CartoDB
-        try {
-            const fallback = await fetch(`https://${sd}.basemaps.cartocdn.com/light_all/${z}/${x}/${y}.png`);
-            const blob = await fallback.blob();
-            return new Response(blob, {
-                headers: { 'content-type': 'image/png', 'cache-control': 'public, max-age=86400' }
-            });
-        } catch {
-            return new Response(null, { status: 502 });
-        }
+    } catch (e) {
+        return new Response('err: ' + e.message, { status: 502 });
     }
 }
