@@ -401,15 +401,15 @@
             position: absolute;
             background: none;
             border: none;
-            font-size: 12px;
-            font-weight: 700;
-            color: #2c3e50;
-            text-shadow: 0 0 4px rgba(255,255,255,0.9), 0 0 8px rgba(255,255,255,0.7);
+            font-size: 14px;
+            font-weight: 800;
+            color: #1a3a5a;
+            text-shadow: 0 0 3px rgba(255,255,255,1), 0 0 6px rgba(255,255,255,0.9), 1px 1px 0 rgba(255,255,255,1);
             white-space: nowrap;
             pointer-events: none;
             transform: translate(-50%, -50%);
-            letter-spacing: 0.5px;
-            font-family: -apple-system, 'PingFang SC', 'Helvetica Neue', Arial, sans-serif;
+            letter-spacing: 1px;
+            font-family: 'PingFang SC', 'Microsoft YaHei', -apple-system, 'Helvetica Neue', Arial, sans-serif;
         }
 
         /* 日期选择器 */
@@ -2674,7 +2674,7 @@
 
         async function loadCountryLabels() {
             try {
-                const resp = await fetch('/static/country_labels.json');
+                const resp = await fetch('/country_labels.json');
                 const labels = await resp.json();
 
                 countryLabelsLayer = L.layerGroup();
