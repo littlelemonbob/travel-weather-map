@@ -2974,13 +2974,23 @@
                     forecast_days: 7,
                 });
                 const url = 'https://api.open-meteo.com/v1/forecast?' + params.toString();
-                try {
-                    const res = await fetch(url, { mode: 'cors' });
-                    if (!res.ok) throw new Error('HTTP ' + res.status);
-                    return { idx, data: await res.json() };
-                } catch (e) {
-                    throw new Error('批' + idx + ' 失败: ' + (e.message || e) + ' | URL长度: ' + url.length);
+
+                // 重试机制：失败 2 次后放弃该批
+                let lastErr = null;
+                for (let attempt = 1; attempt <= 2; attempt++) {
+                    try {
+                        const ctrl = new AbortController();
+                        const timeoutId = setTimeout(() => ctrl.abort(), 15000);
+                        const res = await fetch(url, { mode: 'cors', signal: ctrl.signal });
+                        clearTimeout(timeoutId);
+                        if (!res.ok) throw new Error('HTTP ' + res.status);
+                        return { idx, data: await res.json() };
+                    } catch (e) {
+                        lastErr = e;
+                        console.warn('批' + idx + ' 第' + attempt + '次失败:', e.message);
+                    }
                 }
+                throw new Error('批' + idx + ' 失败: ' + (lastErr?.message || lastErr) + ' | URL长度: ' + url.length);
             });
 
             // 等所有批次完成
