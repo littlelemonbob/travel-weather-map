@@ -2618,11 +2618,10 @@
                 maxBoundsViscosity: 1.0,
             });
 
-            // CartoDB Positron 浅色免费瓦片（无需 Key，全球免费）
-            L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+            // OpenStreetMap 标准浅色瓦片（无需 Key，全球免费）
+            L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
                 maxZoom: 19,
-                subdomains: 'abcd',
-                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/">CARTO</a>',
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
             }).addTo(map);
 
             L.control.zoom({ position: 'bottomleft' }).addTo(map);
