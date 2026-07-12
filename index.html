@@ -2963,7 +2963,7 @@
                 batches.push(cities.slice(i, i + BATCH));
             }
 
-            const promises = batches.map(async (batch) => {
+            const promises = batches.map(async (batch, idx) => {
                 const lats = batch.map(c => c.lat).join(',');
                 const lons = batch.map(c => c.lon).join(',');
                 const params = new URLSearchParams({
@@ -2974,9 +2974,13 @@
                     forecast_days: 7,
                 });
                 const url = 'https://api.open-meteo.com/v1/forecast?' + params.toString();
-                const res = await fetch(url);
-                if (!res.ok) throw new Error('Open-Meteo HTTP ' + res.status);
-                return res.json(); // 返回数组 [each_city_with_daily]
+                try {
+                    const res = await fetch(url, { mode: 'cors' });
+                    if (!res.ok) throw new Error('HTTP ' + res.status);
+                    return { idx, data: await res.json() };
+                } catch (e) {
+                    throw new Error('批' + idx + ' 失败: ' + (e.message || e) + ' | URL长度: ' + url.length);
+                }
             });
 
             // 等所有批次完成
@@ -2985,10 +2989,19 @@
             // 按坐标匹配城市（Open-Meteo 返回坐标会四舍五入到 5 位小数）
             const norm = n => Math.round(n * 100000) / 100000;
             let batchFailures = 0;
+            let lastErr = '';
             for (const r of results) {
-                if (r.status !== 'fulfilled') { batchFailures++; continue; }
-                const arr = r.value;
-                if (!Array.isArray(arr)) { batchFailures++; continue; }
+                if (r.status !== 'fulfilled') {
+                    batchFailures++;
+                    lastErr = r.reason ? (r.reason.message || String(r.reason)) : 'unknown';
+                    continue;
+                }
+                const { idx, data: arr } = r.value;
+                if (!Array.isArray(arr)) {
+                    batchFailures++;
+                    lastErr = '批' + idx + ' 返回非数组';
+                    continue;
+                }
                 for (const cityData of arr) {
                     if (!cityData || !cityData.daily) continue;
                     const lat = norm(cityData.latitude);
@@ -3001,7 +3014,7 @@
 
             const okCount = Object.keys(allWeatherData).length;
             if (okCount === 0) {
-                const errMsg = batchFailures > 0 ? `全部 ${batches.length} 批失败` : '坐标匹配失败';
+                const errMsg = batchFailures > 0 ? `全部 ${batches.length} 批失败。最后错误: ${lastErr}` : '坐标匹配失败';
                 throw new Error(errMsg);
             }
 
