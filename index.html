@@ -3127,10 +3127,15 @@
             hideError();
             document.getElementById('loadingOverlay').classList.remove('hidden');
             closeDetail();
-            setLoadingText('正在获取天气数据...');
+            setLoadingText(t('loading'));
+
+            // 强制超时：30 秒没拉完就报错，避免一直卡住
+            const timeoutPromise = new Promise((_, reject) => {
+                setTimeout(() => reject(new Error('请求超时 (30s), 请检查网络或刷新')), 30000);
+            });
 
             try {
-                await fetchAllWeather();
+                await Promise.race([fetchAllWeather(), timeoutPromise]);
                 const cityCount = Object.keys(allWeatherData).length;
 
                 if (cityCount > 0) {
@@ -3148,16 +3153,13 @@
                 }
             } catch (e) {
                 console.error('数据获取失败:', e);
-                showError(t('errorNet'));
+                const errMsg = e.message || t('errorNet');
+                const label = currentLang === 'zh' ? '获取失败: ' :
+                              currentLang === 'ja' ? '取得失敗: ' :
+                              'Error: ';
+                showError(label + errMsg);
             } finally {
                 document.getElementById('loadingOverlay').classList.add('hidden');
-            }
-            // 切换地图瓦片
-            if (tileLayer) {
-                map.removeLayer(tileLayer);
-                tileLayer = getTileLayer(currentLang).addTo(map);
-                // 重新加载国家标注
-                loadCountryLabels();
             }
         }
 
