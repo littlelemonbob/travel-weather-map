@@ -2656,10 +2656,10 @@
                 maxBoundsViscosity: 1.0,
             });
 
-            // OSM 瓦片通过 Cloudflare Pages Function 代理（解决微信/手机拦截）
-            L.tileLayer('/api/tile?p={z}/{x}/{y}&src=carto', {
-                maxZoom: 19,
-                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/">CARTO</a>',
+            // 高德中文地图瓦片（通过 Cloudflare 代理，兼容手机/微信）
+            L.tileLayer('/api/tile?p={z}/{x}/{y}', {
+                maxZoom: 18,
+                attribution: '© 高德地图',
             }).addTo(map);
 
             L.control.zoom({ position: 'bottomleft' }).addTo(map);
