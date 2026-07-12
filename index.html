@@ -2955,8 +2955,8 @@
                 } catch (_) {}
             }
 
-            // 分批发（每批 100 个城市），比逐个请求快 100 倍
-            const BATCH = 100;
+            // 分批发（每批 50 个城市），URL 更短
+            const BATCH = 50;
             allWeatherData = {};
             const batches = [];
             for (let i = 0; i < cities.length; i += BATCH) {
