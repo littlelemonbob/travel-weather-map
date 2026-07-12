@@ -2772,24 +2772,23 @@
                     forecast_days: 7,
                 });
                 const url = 'https://api.open-meteo.com/v1/forecast?' + params.toString();
-                try {
-                    const res = await fetch(url);
-                    if (!res.ok) throw new Error('HTTP ' + res.status);
-                    const arr = await res.json();
-                    if (!Array.isArray(arr)) throw new Error('非数组返回');
-                    return arr;
-                } catch (e) {
-                    throw new Error('批失败: ' + (e.message || e));
-                }
+                // 在加载文本中显示进度
+                setLoadingText('正在拉取 ' + batch[0]?.name + ' 等城市...');
+                const res = await fetch(url);
+                if (!res.ok) throw new Error('HTTP ' + res.status);
+                const arr = await res.json();
+                if (!Array.isArray(arr)) throw new Error('返回非数组');
+                return arr;
             });
 
             const results = await Promise.allSettled(promises);
 
-            // 按坐标匹配 （Open-Meteo 四舍五入到 5 位小数）
+            // 按坐标匹配
             const norm = n => Math.round(n * 100000) / 100000;
-            for (const r of results) {
-                if (r.status !== 'fulfilled') continue;
-                for (const cityData of r.value) {
+            let batchErrors = [];
+            results.forEach((r, i) => {
+                if (r.status === 'rejected') batchErrors.push('批' + i + ': ' + (r.reason?.message || r.reason));
+                else for (const cityData of r.value) {
                     if (!cityData || !cityData.daily) continue;
                     const lat = norm(cityData.latitude);
                     const lon = norm(cityData.longitude);
@@ -2797,14 +2796,13 @@
                     if (!city) continue;
                     allWeatherData[city.name] = { daily: cityData.daily };
                 }
-            }
+            });
 
             const okCount = Object.keys(allWeatherData).length;
             if (okCount === 0) {
-                const lastErr = results.some(r => r.status === 'rejected') ? results.find(r => r.status === 'rejected').reason?.message : '坐标匹配失败';
-                throw new Error('所有 ' + cities.length + ' 个城市都失败: ' + lastErr);
+                throw new Error('5 批请求结果: ' + JSON.stringify(batchErrors));
             }
-            if (okCount < cities.length) {
+            if (okCount < cities.length * 0.9) {
                 console.warn('部分城市匹配失败:', cities.length - okCount);
             }
 
@@ -2941,11 +2939,11 @@
                         showError(`已显示 ${cityCount}/${cities.length} 个城市`);
                     }
                 } else {
-                    showError('天气数据获取失败，请检查网络后重试');
+                    showError('[v3] 全部城市失败: 0/' + cities.length);
                 }
             } catch (e) {
-                console.error('数据获取失败:', e);
-                showError('天气数据获取失败，请检查网络后重试');
+                console.error('[v3] 数据获取失败:', e);
+                showError('[v3] 失败: ' + (e.message || e));
             } finally {
                 document.getElementById('loadingOverlay').classList.add('hidden');
             }
