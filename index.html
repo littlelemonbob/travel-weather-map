@@ -2753,18 +2753,20 @@
                 } catch (_) {}
             }
 
-            // 逐个城市并发请求（限并发 30 个，避免 Open-Meteo 限流）
-            const CONCURRENCY = 30;
+            // 分批发（每批 100 城市），406 城市只需 5 个请求
+            const BATCH = 100;
             allWeatherData = {};
-            const queue = cities.slice();
-            let active = 0;
-            let failures = 0;
-            let lastErr = '';
+            const batches = [];
+            for (let i = 0; i < cities.length; i += BATCH) {
+                batches.push(cities.slice(i, i + BATCH));
+            }
 
-            async function fetchOne(city) {
+            const promises = batches.map(async (batch) => {
+                const lats = batch.map(c => c.lat).join(',');
+                const lons = batch.map(c => c.lon).join(',');
                 const params = new URLSearchParams({
-                    latitude: String(city.lat),
-                    longitude: String(city.lon),
+                    latitude: lats,
+                    longitude: lons,
                     daily: 'temperature_2m_max,temperature_2m_min,weathercode,precipitation_sum',
                     timezone: 'Asia/Shanghai',
                     forecast_days: 7,
@@ -2773,41 +2775,37 @@
                 try {
                     const res = await fetch(url);
                     if (!res.ok) throw new Error('HTTP ' + res.status);
-                    const data = await res.json();
-                    if (!data.daily) throw new Error('no daily');
-                    allWeatherData[city.name] = { daily: data.daily };
+                    const arr = await res.json();
+                    if (!Array.isArray(arr)) throw new Error('非数组返回');
+                    return arr;
                 } catch (e) {
-                    failures++;
-                    lastErr = e.message || String(e);
+                    throw new Error('批失败: ' + (e.message || e));
+                }
+            });
+
+            const results = await Promise.allSettled(promises);
+
+            // 按坐标匹配 （Open-Meteo 四舍五入到 5 位小数）
+            const norm = n => Math.round(n * 100000) / 100000;
+            for (const r of results) {
+                if (r.status !== 'fulfilled') continue;
+                for (const cityData of r.value) {
+                    if (!cityData || !cityData.daily) continue;
+                    const lat = norm(cityData.latitude);
+                    const lon = norm(cityData.longitude);
+                    const city = cities.find(c => norm(c.lat) === lat && norm(c.lon) === lon);
+                    if (!city) continue;
+                    allWeatherData[city.name] = { daily: cityData.daily };
                 }
             }
-
-            // 用 Promise 并发池
-            await new Promise((resolve) => {
-                let idx = 0;
-                function next() {
-                    if (idx >= queue.length && active === 0) {
-                        resolve();
-                        return;
-                    }
-                    while (active < CONCURRENCY && idx < queue.length) {
-                        const city = queue[idx++];
-                        active++;
-                        fetchOne(city).finally(() => {
-                            active--;
-                            next();
-                        });
-                    }
-                }
-                next();
-            });
 
             const okCount = Object.keys(allWeatherData).length;
             if (okCount === 0) {
-                throw new Error('所有 ' + cities.length + ' 个城市都失败，最后错误: ' + lastErr);
+                const lastErr = results.some(r => r.status === 'rejected') ? results.find(r => r.status === 'rejected').reason?.message : '坐标匹配失败';
+                throw new Error('所有 ' + cities.length + ' 个城市都失败: ' + lastErr);
             }
-            if (failures > 0) {
-                console.warn('部分城市失败:', failures, '/', cities.length, '最后错误:', lastErr);
+            if (okCount < cities.length) {
+                console.warn('部分城市匹配失败:', cities.length - okCount);
             }
 
             // 写入 localStorage 缓存
@@ -2928,7 +2926,11 @@
             setLoadingText('正在获取天气数据...');
 
             try {
-                await fetchAllWeather();
+                // 设置 30 秒超时
+                const timeoutPromise = new Promise((_, reject) =>
+                    setTimeout(() => reject(new Error('请求超时, 请检查网络')), 30000)
+                );
+                await Promise.race([fetchAllWeather(), timeoutPromise]);
                 const cityCount = Object.keys(allWeatherData).length;
 
                 if (cityCount > 0) {
