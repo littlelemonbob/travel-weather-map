@@ -2897,7 +2897,8 @@
                 if (cityCount > 0) {
                     renderMarkers();
                     updateTimeDisplay();
-                    if (cityCount < cities.length) {
+                    // 大部分城市成功（>90%）就不显示警告
+                    if (cityCount < cities.length * 0.9) {
                         showError(`已显示 ${cityCount}/${cities.length} 个城市（部分获取失败）`);
                     }
                 } else {
