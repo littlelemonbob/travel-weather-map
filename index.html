@@ -179,6 +179,12 @@
             to {
                 opacity: 1;
                 transform: translateX(-50%) translateY(0);
+            // 切换地图瓦片
+            if (tileLayer) {
+                map.removeLayer(tileLayer);
+                tileLayer = getTileLayer(currentLang).addTo(map);
+                // 重新加载国家标注
+                loadCountryLabels();
             }
         }
 
@@ -324,6 +330,12 @@
         @keyframes spin {
             to {
                 transform: rotate(360deg);
+            // 切换地图瓦片
+            if (tileLayer) {
+                map.removeLayer(tileLayer);
+                tileLayer = getTileLayer(currentLang).addTo(map);
+                // 重新加载国家标注
+                loadCountryLabels();
             }
         }
         .loading-overlay p {
@@ -455,6 +467,12 @@
             .header .sub,
             .header .dot {
                 display: none;
+            // 切换地图瓦片
+            if (tileLayer) {
+                map.removeLayer(tileLayer);
+                tileLayer = getTileLayer(currentLang).addTo(map);
+                // 重新加载国家标注
+                loadCountryLabels();
             }
         }
         @media (max-width: 640px) {
@@ -502,6 +520,12 @@
             }
             .weather-marker .temp-range {
                 font-size: 9px;
+            // 切换地图瓦片
+            if (tileLayer) {
+                map.removeLayer(tileLayer);
+                tileLayer = getTileLayer(currentLang).addTo(map);
+                // 重新加载国家标注
+                loadCountryLabels();
             }
         }
     </style>
@@ -676,6 +700,13 @@
                     const cityName = document.getElementById('detailCityName').textContent;
                     if (cityName && cityName !== '—') showDetail(cityName);
                 }
+            }
+            // 切换地图瓦片
+            if (tileLayer) {
+                map.removeLayer(tileLayer);
+                tileLayer = getTileLayer(currentLang).addTo(map);
+                // 重新加载国家标注
+                loadCountryLabels();
             }
         }
 
@@ -2771,9 +2802,40 @@
 
         // ============= 全局变量 =============
         let map, markers = [];
+        let tileLayer;
         let markerCluster;
         let allWeatherData = {};
         let selectedDay = 0;  // 0=今天, 1=明天, ... 6
+
+        // ============= 地图瓦片源（按语言切换） =============
+        function getTileLayer(lang) {
+            if (lang === 'zh') {
+                // 高德中文地图（中国+全球中文标注）
+                const sd = Math.floor(Math.random() * 4) + 1;
+                return L.tileLayer('https://webrd0' + sd + '.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}', {
+                    maxZoom: 18,
+                    attribution: '&copy; 高德地图',
+                });
+            } else if (lang === 'ja') {
+                // OSM（日本区域显示日文）
+                return L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    maxZoom: 19,
+                    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+                });
+            } else {
+                // English: OSM 标准（全球英文/本地语言）
+                return L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    maxZoom: 19,
+                    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+                });
+            // 切换地图瓦片
+            if (tileLayer) {
+                map.removeLayer(tileLayer);
+                tileLayer = getTileLayer(currentLang).addTo(map);
+                // 重新加载国家标注
+                loadCountryLabels();
+            }
+        }
 
         // ============= 初始化地图 =============
         function initMap() {
@@ -2786,11 +2848,8 @@
                 maxBoundsViscosity: 1.0,
             });
 
-            // OpenStreetMap 标准浅色瓦片（无需 Key，全球免费）
-            L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                maxZoom: 19,
-                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-            }).addTo(map);
+            // 根据语言选择瓦片
+            tileLayer = getTileLayer(currentLang).addTo(map);
 
             L.control.zoom({ position: 'bottomleft' }).addTo(map);
 
@@ -2854,6 +2913,12 @@
                 btn.innerHTML = `<span class="day-label">${label}</span>${dateStr}`;
                 btn.onclick = () => selectDay(i);
                 container.appendChild(btn);
+            // 切换地图瓦片
+            if (tileLayer) {
+                map.removeLayer(tileLayer);
+                tileLayer = getTileLayer(currentLang).addTo(map);
+                // 重新加载国家标注
+                loadCountryLabels();
             }
         }
 
@@ -2867,6 +2932,12 @@
                 if (cityName && cityName !== '—') {
                     showDetail(cityName);
                 }
+            // 切换地图瓦片
+            if (tileLayer) {
+                map.removeLayer(tileLayer);
+                tileLayer = getTileLayer(currentLang).addTo(map);
+                // 重新加载国家标注
+                loadCountryLabels();
             }
         }
 
@@ -3080,6 +3151,13 @@
                 showError(t('errorNet'));
             } finally {
                 document.getElementById('loadingOverlay').classList.add('hidden');
+            }
+            // 切换地图瓦片
+            if (tileLayer) {
+                map.removeLayer(tileLayer);
+                tileLayer = getTileLayer(currentLang).addTo(map);
+                // 重新加载国家标注
+                loadCountryLabels();
             }
         }
 
