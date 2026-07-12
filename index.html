@@ -2702,7 +2702,7 @@
             }
         }
 
-        // ============= 拉取所有城市天气（分批请求 + 浏览器直连 Open-Meteo） =============
+        // ============= 拉取所有城市天气（并发请求每个城市 + 浏览器直连 Open-Meteo） =============
         async function fetchAllWeather() {
             // 检查 localStorage 缓存
             const cachedStr = localStorage.getItem('weatherCache');
@@ -2716,60 +2716,61 @@
                 } catch (_) {}
             }
 
-            // 分批请求：每批 100 个城市，避免 URL 过长 / CORS 失败
-            const BATCH = 100;
+            // 逐个城市并发请求（限并发 30 个，避免 Open-Meteo 限流）
+            const CONCURRENCY = 30;
             allWeatherData = {};
-            const batches = [];
-            for (let i = 0; i < cities.length; i += BATCH) {
-                batches.push(cities.slice(i, i + BATCH));
-            }
+            const queue = cities.slice();
+            let active = 0;
+            let failures = 0;
+            let lastErr = '';
 
-            const promises = batches.map(async (batch) => {
-                const lats = batch.map(c => c.lat).join(',');
-                const lons = batch.map(c => c.lon).join(',');
+            async function fetchOne(city) {
                 const params = new URLSearchParams({
-                    latitude: lats,
-                    longitude: lons,
+                    latitude: String(city.lat),
+                    longitude: String(city.lon),
                     daily: 'temperature_2m_max,temperature_2m_min,weathercode,precipitation_sum',
                     timezone: 'Asia/Shanghai',
                     forecast_days: 7,
                 });
                 const url = 'https://api.open-meteo.com/v1/forecast?' + params.toString();
-                const res = await fetch(url);
-                if (!res.ok) throw new Error('Open-Meteo HTTP ' + res.status);
-                return res.json();
+                try {
+                    const res = await fetch(url);
+                    if (!res.ok) throw new Error('HTTP ' + res.status);
+                    const data = await res.json();
+                    if (!data.daily) throw new Error('no daily');
+                    allWeatherData[city.name] = { daily: data.daily };
+                } catch (e) {
+                    failures++;
+                    lastErr = e.message || String(e);
+                }
+            }
+
+            // 用 Promise 并发池
+            await new Promise((resolve) => {
+                let idx = 0;
+                function next() {
+                    if (idx >= queue.length && active === 0) {
+                        resolve();
+                        return;
+                    }
+                    while (active < CONCURRENCY && idx < queue.length) {
+                        const city = queue[idx++];
+                        active++;
+                        fetchOne(city).finally(() => {
+                            active--;
+                            next();
+                        });
+                    }
+                }
+                next();
             });
 
-            // 等所有批次完成（用 allSettled，单批失败不阻塞其他）
-            const results = await Promise.allSettled(promises);
-            const okResults = results.filter(r => r.status === 'fulfilled').map(r => r.value);
-
-            // 重组数据：Open-Meteo 多位置返回的是数组，每个城市一个对象
-            // 用 round 后的坐标匹配（Open-Meteo 会四舍五入到小数点后 4 位附近）
-            const norm = n => Math.round(n * 10000) / 10000;
-            okResults.forEach(arr => {
-                if (!Array.isArray(arr)) return;
-                arr.forEach(raw => {
-                    if (!raw || !raw.daily) return;
-                    const lat = norm(raw.latitude);
-                    const lon = norm(raw.longitude);
-                    const city = cities.find(c => norm(c.lat) === lat && norm(c.lon) === lon);
-                    if (!city) return;
-                    const d = raw.daily;
-                    allWeatherData[city.name] = {
-                        daily: {
-                            time: d.time || [],
-                            temperature_2m_max: d.temperature_2m_max || [],
-                            temperature_2m_min: d.temperature_2m_min || [],
-                            weathercode: d.weathercode || [],
-                            precipitation_sum: d.precipitation_sum || [],
-                        }
-                    };
-                });
-            });
-
-            if (Object.keys(allWeatherData).length === 0) {
-                throw new Error('所有批次均失败');
+            const okCount = Object.keys(allWeatherData).length;
+            if (okCount === 0) {
+                throw new Error('所有 ' + cities.length + ' 个城市都失败，最后错误: ' + lastErr);
+            }
+            if (failures > 0) {
+                console.warn('部分城市失败:', failures, '/', cities.length, '最后错误:', lastErr);
             }
 
             // 写入 localStorage 缓存
@@ -2904,7 +2905,7 @@
                 }
             } catch (e) {
                 console.error('数据获取失败:', e);
-                showError('天气数据获取失败，请检查网络后重试');
+                showError('失败: ' + e.message + ' | 批次: ' + (e.batchIdx !== undefined ? e.batchIdx : '?'));
             } finally {
                 document.getElementById('loadingOverlay').classList.add('hidden');
             }
