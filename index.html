@@ -2771,12 +2771,13 @@
                     timezone: 'Asia/Shanghai',
                     forecast_days: 7,
                 });
-                const url = 'https://api.open-meteo.com/v1/forecast?' + params.toString();
-                // 在加载文本中显示进度
+                // 使用 Cloudflare Pages Function 代理（绕过 CORS / 微信拦截）
                 setLoadingText('正在拉取 ' + batch[0]?.name + ' 等城市...');
-                const res = await fetch(url);
-                if (!res.ok) throw new Error('HTTP ' + res.status);
+                const proxyUrl = '/api/weather?lats=' + encodeURIComponent(lats) + '&lons=' + encodeURIComponent(lons);
+                const res = await fetch(proxyUrl);
+                if (!res.ok) throw new Error('代理 HTTP ' + res.status);
                 const arr = await res.json();
+                if (arr.error) throw new Error('代理: ' + arr.error);
                 if (!Array.isArray(arr)) throw new Error('返回非数组');
                 return arr;
             });
