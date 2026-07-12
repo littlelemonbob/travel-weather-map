@@ -2657,7 +2657,7 @@
             });
 
             // 高德中文地图瓦片（通过 Cloudflare 代理，兼容手机/微信）
-            L.tileLayer('/api/tile?p={z}/{x}/{y}', {
+            L.tileLayer('/api/tile?v=2&p={z}/{x}/{y}', {
                 maxZoom: 18,
                 attribution: '© 高德地图',
             }).addTo(map);
