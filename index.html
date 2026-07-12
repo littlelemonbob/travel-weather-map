@@ -2941,7 +2941,7 @@
             }
         }
 
-        // ============= 拉取所有城市天气（并发请求每个城市 + 浏览器直连 Open-Meteo） =============
+        // ============= 拉取所有城市天气（分批发，并发获取 + 浏览器直连 Open-Meteo） =============
         async function fetchAllWeather() {
             // 检查 localStorage 缓存
             const cachedStr = localStorage.getItem('weatherCache');
@@ -2955,61 +2955,54 @@
                 } catch (_) {}
             }
 
-            // 逐个城市并发请求（限并发 30 个，避免 Open-Meteo 限流）
-            const CONCURRENCY = 30;
+            // 分批发（每批 100 个城市），比逐个请求快 100 倍
+            const BATCH = 100;
             allWeatherData = {};
-            const queue = cities.slice();
-            let active = 0;
-            let failures = 0;
-            let lastErr = '';
+            const batches = [];
+            for (let i = 0; i < cities.length; i += BATCH) {
+                batches.push(cities.slice(i, i + BATCH));
+            }
 
-            async function fetchOne(city) {
+            const promises = batches.map(async (batch) => {
+                const lats = batch.map(c => c.lat).join(',');
+                const lons = batch.map(c => c.lon).join(',');
                 const params = new URLSearchParams({
-                    latitude: String(city.lat),
-                    longitude: String(city.lon),
+                    latitude: lats,
+                    longitude: lons,
                     daily: 'temperature_2m_max,temperature_2m_min,weathercode,precipitation_sum',
                     timezone: 'Asia/Shanghai',
                     forecast_days: 7,
                 });
                 const url = 'https://api.open-meteo.com/v1/forecast?' + params.toString();
-                try {
-                    const res = await fetch(url);
-                    if (!res.ok) throw new Error('HTTP ' + res.status);
-                    const data = await res.json();
-                    if (!data.daily) throw new Error('no daily');
-                    allWeatherData[city.name] = { daily: data.daily };
-                } catch (e) {
-                    failures++;
-                    lastErr = e.message || String(e);
+                const res = await fetch(url);
+                if (!res.ok) throw new Error('Open-Meteo HTTP ' + res.status);
+                return res.json(); // 返回数组 [each_city_with_daily]
+            });
+
+            // 等所有批次完成
+            const results = await Promise.allSettled(promises);
+
+            // 按坐标匹配城市（Open-Meteo 返回坐标会四舍五入）
+            const norm = n => Math.round(n * 100) / 100;
+            let batchFailures = 0;
+            for (const r of results) {
+                if (r.status !== 'fulfilled') { batchFailures++; continue; }
+                const arr = r.value;
+                if (!Array.isArray(arr)) { batchFailures++; continue; }
+                for (const cityData of arr) {
+                    if (!cityData || !cityData.daily) continue;
+                    const lat = norm(cityData.latitude);
+                    const lon = norm(cityData.longitude);
+                    const city = cities.find(c => norm(c.lat) === lat && norm(c.lon) === lon);
+                    if (!city) continue;
+                    allWeatherData[city.name] = { daily: cityData.daily };
                 }
             }
-
-            // 用 Promise 并发池
-            await new Promise((resolve) => {
-                let idx = 0;
-                function next() {
-                    if (idx >= queue.length && active === 0) {
-                        resolve();
-                        return;
-                    }
-                    while (active < CONCURRENCY && idx < queue.length) {
-                        const city = queue[idx++];
-                        active++;
-                        fetchOne(city).finally(() => {
-                            active--;
-                            next();
-                        });
-                    }
-                }
-                next();
-            });
 
             const okCount = Object.keys(allWeatherData).length;
             if (okCount === 0) {
-                throw new Error('所有 ' + cities.length + ' 个城市都失败，最后错误: ' + lastErr);
-            }
-            if (failures > 0) {
-                console.warn('部分城市失败:', failures, '/', cities.length, '最后错误:', lastErr);
+                const errMsg = batchFailures > 0 ? `全部 ${batches.length} 批失败` : '坐标匹配失败';
+                throw new Error(errMsg);
             }
 
             // 写入 localStorage 缓存
