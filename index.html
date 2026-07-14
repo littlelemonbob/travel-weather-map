@@ -3142,10 +3142,39 @@
                 const q = query.toLowerCase();
                 const matches = cities.filter(c => c.name.toLowerCase().includes(q)).slice(0, 8);
                 if (matches.length === 0) {
+                    // 内置列表无匹配 → 调 Open-Meteo 地理编码 API 查全球
                     const li = document.createElement('li');
                     li.className = 'no-result';
-                    li.textContent = '没有匹配的城市';
+                    li.textContent = '正在查询全球数据库...';
                     results.appendChild(li);
+                    results.classList.add('show');
+                    positionResults();
+
+                    fetch('/api/geocode?name=' + encodeURIComponent(query))
+                        .then(r => r.json())
+                        .then(data => {
+                            results.innerHTML = '';
+                            if (data.error || !data.results || data.results.length === 0) {
+                                const li2 = document.createElement('li');
+                                li2.className = 'no-result';
+                                li2.textContent = '未找到该城市: ' + query;
+                                results.appendChild(li2);
+                            } else {
+                                data.results.forEach((c, idx) => {
+                                    const li2 = document.createElement('li');
+                                    const label = c.name + (c.country ? ', ' + c.country : '') + (c.admin1 && c.admin1 !== c.country ? ' (' + c.admin1 + ')' : '');
+                                    li2.textContent = label;
+                                    li2.dataset.idx = idx;
+                                    li2.onclick = () => selectExternalCity(c);
+                                    results.appendChild(li2);
+                                });
+                            }
+                            positionResults();
+                        })
+                        .catch(() => {
+                            results.innerHTML = '<li class="no-result">查询失败</li>';
+                        });
+                    return;
                 } else {
                     matches.forEach((c, idx) => {
                         const li = document.createElement('li');
@@ -3157,6 +3186,37 @@
                 }
                 results.classList.add('show');
                 positionResults();
+            }
+
+            // 临时添加一个城市到地图（用它的实时坐标和天气）
+            function selectExternalCity(c) {
+                results.classList.remove('show');
+                input.value = '';
+                const city = { name: c.name, lat: c.lat, lon: c.lon };
+                // 飞行过去
+                map.flyTo([c.lat, c.lon], 8, { duration: 1.2 });
+                // 直接拉一次单城市天气 + 临时加到地图
+                setTimeout(async () => {
+                    const params = new URLSearchParams({
+                        latitude: String(c.lat),
+                        longitude: String(c.lon),
+                        daily: 'temperature_2m_max,temperature_2m_min,weathercode,precipitation_sum',
+                        timezone: 'Asia/Shanghai',
+                        forecast_days: 7,
+                    });
+                    const res = await fetch('/api/weather?lats=' + c.lat + '&lons=' + c.lon);
+                    if (!res.ok) {
+                        showError('获取城市天气失败');
+                        return;
+                    }
+                    const arr = await res.json();
+                    if (arr && arr[0] && arr[0].daily) {
+                        allWeatherData[c.name] = { daily: arr[0].daily };
+                        cities.push(city);
+                        renderMarkers();
+                        showDetail(c.name);
+                    }
+                }, 1300);
             }
 
             function selectCity(city) {
