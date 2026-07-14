@@ -136,9 +136,6 @@
         }
         .search-results {
             position: fixed;
-            top: 64px;
-            left: 50%;
-            transform: translateX(-50%);
             background: rgba(11, 23, 33, 0.98);
             backdrop-filter: blur(12px);
             border: 1px solid rgba(96, 165, 250, 0.5);
@@ -149,7 +146,7 @@
             min-width: 220px;
             max-height: 280px;
             overflow-y: auto;
-            z-index: 99999;
+            z-index: 999999;
             display: none;
             box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
         }
@@ -3125,6 +3122,15 @@
         function setupSearch() {
             const input = document.getElementById('searchInput');
             const results = document.getElementById('searchResults');
+            // 移到 body 末尾，脱离父级 stacking context
+            document.body.appendChild(results);
+            // 实时计算下拉位置
+            function positionResults() {
+                const r = input.getBoundingClientRect();
+                results.style.top = (r.bottom + 4) + 'px';
+                results.style.left = r.left + 'px';
+            }
+            window.addEventListener('resize', positionResults);
             let selectedIdx = -1;
 
             function showResults(query) {
@@ -3150,6 +3156,7 @@
                     });
                 }
                 results.classList.add('show');
+                positionResults();
             }
 
             function selectCity(city) {
