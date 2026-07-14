@@ -108,6 +108,68 @@
             background: #1a2a38;
             color: #e8edf3;
         }
+
+        /* 搜索框 */
+        .search-box {
+            position: relative;
+            margin: 0 4px;
+        }
+        #searchInput {
+            background: rgba(255, 255, 255, 0.06);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            color: #e8edf3;
+            padding: 4px 10px;
+            border-radius: 8px;
+            font-size: 12px;
+            outline: none;
+            font-family: inherit;
+            width: 140px;
+            transition: all 0.2s;
+        }
+        #searchInput:focus {
+            background: rgba(255, 255, 255, 0.12);
+            border-color: rgba(96, 165, 250, 0.5);
+            width: 180px;
+        }
+        #searchInput::placeholder {
+            color: #64748b;
+        }
+        .search-results {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            margin-top: 4px;
+            background: rgba(11, 23, 33, 0.95);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            list-style: none;
+            margin: 0;
+            padding: 4px 0;
+            min-width: 200px;
+            max-height: 240px;
+            overflow-y: auto;
+            z-index: 2000;
+            display: none;
+        }
+        .search-results.show { display: block; }
+        .search-results li {
+            padding: 8px 14px;
+            cursor: pointer;
+            font-size: 13px;
+            color: #e8edf3;
+            transition: background 0.15s;
+        }
+        .search-results li:hover {
+            background: rgba(96, 165, 250, 0.2);
+        }
+        .search-results .no-result {
+            color: #64748b;
+            cursor: default;
+        }
+        .search-results .no-result:hover {
+            background: none;
+        }
         @media (max-width: 800px) {
             .header .sub,
             .header .dot {
@@ -533,6 +595,10 @@
     <!-- 头部 -->
     <div class="header" id="header">
         <h1 id="headerTitle">🌤 旅行天气地图</h1>
+        <div class="search-box">
+            <input type="text" id="searchInput" placeholder="🔍 搜索城市..." autocomplete="off" />
+            <ul id="searchResults" class="search-results"></ul>
+        </div>
         <span class="sub" id="updateTime">加载中...</span>
         <span class="dot"></span>
         <button class="refresh-btn" onclick="refreshData()">🔄 刷新</button>
@@ -3054,10 +3120,84 @@
             }
         }
 
+        // ============= 城市搜索 =============
+        function setupSearch() {
+            const input = document.getElementById('searchInput');
+            const results = document.getElementById('searchResults');
+            let selectedIdx = -1;
+
+            function showResults(query) {
+                results.innerHTML = '';
+                if (!query || query.length === 0) {
+                    results.classList.remove('show');
+                    return;
+                }
+                const q = query.toLowerCase();
+                const matches = cities.filter(c => c.name.toLowerCase().includes(q)).slice(0, 8);
+                if (matches.length === 0) {
+                    const li = document.createElement('li');
+                    li.className = 'no-result';
+                    li.textContent = '没有匹配的城市';
+                    results.appendChild(li);
+                } else {
+                    matches.forEach((c, idx) => {
+                        const li = document.createElement('li');
+                        li.textContent = c.name;
+                        li.dataset.idx = idx;
+                        li.onclick = () => selectCity(c);
+                        results.appendChild(li);
+                    });
+                }
+                results.classList.add('show');
+            }
+
+            function selectCity(city) {
+                results.classList.remove('show');
+                input.value = '';
+                // 飞行到该城市
+                map.flyTo([city.lat, city.lon], 8, { duration: 1.2 });
+                // 弹出详情
+                setTimeout(() => showDetail(city.name), 1300);
+            }
+
+            input.addEventListener('input', (e) => {
+                selectedIdx = -1;
+                showResults(e.target.value);
+            });
+            input.addEventListener('focus', (e) => {
+                if (e.target.value) showResults(e.target.value);
+            });
+            input.addEventListener('blur', () => {
+                setTimeout(() => results.classList.remove('show'), 200);
+            });
+            input.addEventListener('keydown', (e) => {
+                const items = results.querySelectorAll('li:not(.no-result)');
+                if (e.key === 'ArrowDown') {
+                    e.preventDefault();
+                    selectedIdx = Math.min(selectedIdx + 1, items.length - 1);
+                } else if (e.key === 'ArrowUp') {
+                    e.preventDefault();
+                    selectedIdx = Math.max(selectedIdx - 1, 0);
+                } else if (e.key === 'Enter' && selectedIdx >= 0) {
+                    e.preventDefault();
+                    const idx = parseInt(items[selectedIdx].dataset.idx);
+                    const city = cities.filter(c => c.name.toLowerCase().includes(input.value.toLowerCase())).slice(0, 8)[idx];
+                    if (city) selectCity(city);
+                } else if (e.key === 'Escape') {
+                    results.classList.remove('show');
+                    input.blur();
+                }
+                items.forEach((li, i) => {
+                    li.style.background = i === selectedIdx ? 'rgba(96, 165, 250, 0.3)' : '';
+                });
+            });
+        }
+
         // ============= 启动 =============
         initMap();
         renderDateSelector();
         loadCountryLabels();
+        setupSearch();
         refreshData();
 
         // 每小时自动刷新
