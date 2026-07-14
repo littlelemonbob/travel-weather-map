@@ -135,10 +135,10 @@
             color: #64748b;
         }
         .search-results {
-            position: absolute;
-            top: 100%;
-            left: 0;
-            margin-top: 4px;
+            position: fixed;
+            top: 60px;
+            left: 50%;
+            transform: translateX(-50%);
             background: rgba(11, 23, 33, 0.95);
             backdrop-filter: blur(12px);
             border: 1px solid rgba(255, 255, 255, 0.1);
@@ -149,8 +149,9 @@
             min-width: 200px;
             max-height: 240px;
             overflow-y: auto;
-            z-index: 2000;
+            z-index: 99999;
             display: none;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
         }
         .search-results.show { display: block; }
         .search-results li {
@@ -3175,22 +3176,30 @@
                 if (e.key === 'ArrowDown') {
                     e.preventDefault();
                     selectedIdx = Math.min(selectedIdx + 1, items.length - 1);
+                    highlightItem(items, selectedIdx);
                 } else if (e.key === 'ArrowUp') {
                     e.preventDefault();
                     selectedIdx = Math.max(selectedIdx - 1, 0);
-                } else if (e.key === 'Enter' && selectedIdx >= 0) {
+                    highlightItem(items, selectedIdx);
+                } else if (e.key === 'Enter') {
                     e.preventDefault();
-                    const idx = parseInt(items[selectedIdx].dataset.idx);
-                    const city = cities.filter(c => c.name.toLowerCase().includes(input.value.toLowerCase())).slice(0, 8)[idx];
-                    if (city) selectCity(city);
+                    // 优先用键盘选中；没选中则选第一项
+                    let idx = selectedIdx >= 0 ? selectedIdx : 0;
+                    if (items[idx]) {
+                        const city = cities.filter(c => c.name.toLowerCase().includes(input.value.toLowerCase())).slice(0, 8)[idx];
+                        if (city) selectCity(city);
+                    }
                 } else if (e.key === 'Escape') {
                     results.classList.remove('show');
                     input.blur();
                 }
-                items.forEach((li, i) => {
-                    li.style.background = i === selectedIdx ? 'rgba(96, 165, 250, 0.3)' : '';
-                });
             });
+
+            function highlightItem(items, idx) {
+                items.forEach((li, i) => {
+                    li.style.background = i === idx ? 'rgba(96, 165, 250, 0.3)' : '';
+                });
+            }
         }
 
         // ============= 启动 =============
